@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import time
 import requests
 
 # ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -41,9 +42,17 @@ def call_api(system_prompt: str, user_prompt: str) -> str:
             {"role": "user",   "content": user_prompt},
         ],
     }
-    resp = requests.post(API_ENDPOINT, headers=headers, json=payload, timeout=120)
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    wait = 30
+    for attempt in range(5):
+        resp = requests.post(API_ENDPOINT, headers=headers, json=payload, timeout=120)
+        if resp.status_code == 429:
+            print(f"  [限速] 等待 {wait}s 后重试（第{attempt+1}次）...")
+            time.sleep(wait)
+            wait = min(wait * 2, 120)
+            continue
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    raise RuntimeError("API 多次限速，放弃重试")
 
 
 # ── 财经晨报 ──────────────────────────────────────────────────────────────────
@@ -233,6 +242,10 @@ def main():
     finance_html = md_to_html(finance_md, f"财经晨报 {date_str}")
     send_email(f"📈 财经晨报 {date_str}", finance_html)
     print("财经晨报已发送")
+
+    # 两次调用之间等待，避免限速
+    print("等待 30s 避免限速...")
+    time.sleep(30)
 
     # AI 日报
     print("生成 AI 日报...")
