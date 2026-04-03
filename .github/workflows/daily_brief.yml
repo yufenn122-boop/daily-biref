@@ -1,0 +1,28 @@
+name: Daily Brief
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 00:00 = 新加坡时间 08:00
+  workflow_dispatch:       # 允许手动触发测试
+
+jobs:
+  send-brief:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily brief
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          TO_EMAIL: ${{ secrets.TO_EMAIL }}
+        run: python daily_brief.py
