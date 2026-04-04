@@ -16,7 +16,7 @@ import requests
 
 API_KEY      = os.environ["ANTHROPIC_API_KEY"]
 API_ENDPOINT = "https://code.ppchat.vip/v1/chat/completions"
-MODEL        = "claude-sonnet-4-5-20250929"
+MODEL        = "gpt-4o"
 
 SMTP_HOST    = "smtp.qq.com"
 SMTP_PORT    = 465
