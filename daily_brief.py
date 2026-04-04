@@ -14,17 +14,31 @@ import requests
 
 # ── 配置 ──────────────────────────────────────────────────────────────────────
 
-API_KEY      = os.environ["ANTHROPIC_API_KEY"]
-API_ENDPOINT = "https://code.ppchat.vip/v1/chat/completions"
-MODEL        = "gpt-5.4"
+def get_required_env(*keys):
+    for k in keys:
+        v = os.environ.get(k, "").strip()
+        if v:
+            return v
+    raise RuntimeError(f"必须设置环境变量之一: {keys}")
+
+def get_env_or_default(key, default):
+    return os.environ.get(key, "").strip() or default
+
+API_KEY      = get_required_env("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
+BASE_URL     = get_env_or_default("OPENAI_BASE_URL", "https://code.ppchat.vip/v1").rstrip("/")
+MODEL        = get_env_or_default("OPENAI_MODEL", "gpt-5.4")
+API_ENDPOINT = f"{BASE_URL}/chat/completions"
 
 SMTP_HOST    = "smtp.qq.com"
 SMTP_PORT    = 465
-SMTP_USER    = os.environ["SMTP_USER"]
-SMTP_PASS    = os.environ["SMTP_PASSWORD"]
-TO_EMAIL     = os.environ["TO_EMAIL"]
+SMTP_USER    = get_required_env("SMTP_USER")
+SMTP_PASS    = get_required_env("SMTP_PASSWORD")
+TO_EMAIL     = get_required_env("TO_EMAIL")
 
 SGT = timezone(timedelta(hours=8))
+
+print(f"[配置] 使用模型: {MODEL}")
+print(f"[配置] API Endpoint: {API_ENDPOINT}")
 
 
 # ── 调用 API ──────────────────────────────────────────────────────────────────
@@ -59,10 +73,12 @@ def call_api(system_prompt: str, user_prompt: str) -> str:
 
 FINANCE_SYSTEM = """你是一位专业的财经分析师，负责生成结构清晰的财经晨报。
 要求：专业、克制、清晰，像投研晨报摘要，不像情绪化媒体稿。
-禁止使用"血洗""崩盘""全面主导"等夸张词。不提供直接投资建议。"""
+禁止使用"血洗""崩盘""全面主导"等夸张词。不提供直接投资建议。
+你具备联网搜索能力，必须主动搜索当天真实财经新闻后再生成内容，不得凭空编造。"""
 
 def finance_user_prompt(date_str: str) -> str:
-    return f"""请生成 {date_str} 的财经晨报，整理过去24小时内的重要财经资讯。
+    return f"""当前真实日期是 {date_str}，这不是未来日期，请使用联网搜索获取今天真实发生的财经新闻。
+请生成 {date_str} 的财经晨报，整理过去24小时内的重要财经资讯。
 
 必须严格使用以下结构输出（Markdown格式）：
 
@@ -103,7 +119,8 @@ def finance_user_prompt(date_str: str) -> str:
 # ── AI 日报 ───────────────────────────────────────────────────────────────────
 
 AI_SYSTEM = """你是一位专业的AI行业分析师，负责生成结构清晰的AI每日资讯简报。
-要求：清晰、简洁、信息密度高，像专业简报，不像公众号长文。不标题党，不写空话。"""
+要求：清晰、简洁、信息密度高，像专业简报，不像公众号长文。不标题党，不写空话。
+你具备联网搜索能力，必须主动搜索当天真实AI资讯后再生成内容，不得凭空编造。"""
 
 def ai_user_prompt(date_str: str) -> str:
     return f"""请生成 {date_str} 的AI日报，整理过去24小时内的重要AI资讯。
@@ -160,20 +177,19 @@ def send_email(subject: str, html_body: str):
 
 
 def md_to_html(md: str, title: str) -> str:
-    """简单的 Markdown → HTML 转换（不依赖额外库）"""
+    import re
     lines = md.split("\n")
     html_lines = []
     in_table = False
     in_list = False
 
     for line in lines:
-        # 表格
         if line.startswith("|"):
             if not in_table:
                 html_lines.append('<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12px 0;">')
                 in_table = True
             if set(line.replace("|","").replace("-","").replace(" ","")) == set():
-                continue  # 分隔行跳过
+                continue
             cells = [c.strip() for c in line.strip("|").split("|")]
             tag = "th" if html_lines[-1] == '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin:12px 0;">' else "td"
             html_lines.append("<tr>" + "".join(f"<{tag}>{c}</{tag}>" for c in cells) + "</tr>")
@@ -182,22 +198,17 @@ def md_to_html(md: str, title: str) -> str:
             html_lines.append("</table>")
             in_table = False
 
-        # 标题
         if line.startswith("# "):
             html_lines.append(f'<h1 style="color:#1a1a2e;border-bottom:2px solid #1a1a2e;padding-bottom:8px;">{line[2:]}</h1>')
         elif line.startswith("## "):
             html_lines.append(f'<h2 style="color:#2f5496;margin-top:24px;">{line[3:]}</h2>')
         elif line.startswith("### "):
             html_lines.append(f'<h3 style="color:#333;">{line[4:]}</h3>')
-        # 列表
         elif line.startswith("- "):
             if not in_list:
                 html_lines.append("<ul>")
                 in_list = True
-            content = line[2:]
-            # **bold**
-            import re
-            content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', content)
+            content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', line[2:])
             html_lines.append(f"<li>{content}</li>")
             continue
         else:
@@ -207,7 +218,6 @@ def md_to_html(md: str, title: str) -> str:
             if line.strip() == "":
                 html_lines.append("<br>")
             else:
-                import re
                 line = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', line)
                 html_lines.append(f"<p style='margin:4px 0;'>{line}</p>")
 
@@ -236,18 +246,15 @@ def main():
 
     print(f"[{now.strftime('%Y-%m-%d %H:%M')} SGT] 开始生成简报...")
 
-    # 财经晨报
     print("生成财经晨报...")
     finance_md = call_api(FINANCE_SYSTEM, finance_user_prompt(date_str))
     finance_html = md_to_html(finance_md, f"财经晨报 {date_str}")
     send_email(f"📈 财经晨报 {date_str}", finance_html)
     print("财经晨报已发送")
 
-    # 两次调用之间等待，避免限速
     print("等待 30s 避免限速...")
     time.sleep(30)
 
-    # AI 日报
     print("生成 AI 日报...")
     ai_md = call_api(AI_SYSTEM, ai_user_prompt(date_str))
     ai_html = md_to_html(ai_md, f"AI日报 {date_str}")
