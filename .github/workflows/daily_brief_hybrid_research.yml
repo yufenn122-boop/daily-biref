@@ -1,8 +1,6 @@
 name: Daily Brief Hybrid Research
 
 on:
-  schedule:
-    - cron: '17 0 * * *'  # Every day at UTC 00:17 = Singapore time 08:17
   workflow_dispatch:
 
 jobs:
