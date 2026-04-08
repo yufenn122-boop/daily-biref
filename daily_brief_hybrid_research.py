@@ -12,91 +12,84 @@ from datetime import datetime
 import daily_brief_hybrid as base
 
 
-FINANCE_SYSTEM = """你是一位经验丰富的宏观与策略分析师，负责根据已提供的新闻素材生成正式、克制、面向决策的财经晨报。
-要求：
-1. 只能基于用户给出的素材写作，不能杜撰事实。
-2. 输出像投研晨会材料，突出主线、增量、影响、风险、观察点。
-3. 语言简洁、专业、克制，不写情绪化词汇。
-4. 如果素材不足，就减少条数，不要硬凑。"""
+FINANCE_SYSTEM = """宏观策略分析师。根据提供的新闻素材生成财经晨报。
+规则：只用素材中的事实；禁止编造任何数字、涨跌幅、价格；素材不足就减少条数；语言简洁克制，不用情绪化词汇。"""
 
 
 def finance_user_prompt(date_str: str, context: str) -> str:
-    return f"""以下是程序已收集到的过去24小时财经新闻素材，请仅基于这些素材生成 {date_str} 的正式财经晨报。
+    return f"""过去24小时财经新闻素材如下，仅基于此生成 {date_str} 财经晨报。
 
 {context}
 
-必须严格使用以下结构输出（Markdown格式）：
+输出结构（Markdown）：
 
 # 财经晨报 | {date_str}
 
 ## 今日核心判断
-1-2句话概括今天市场在交易什么。
+1-2句，市场在交易什么。
 
 ## 增量驱动（24h）
-3-5条，每条写清：发生了什么 + 为什么重要。
-
-## 资产表现速览
-使用表格，至少包含：A股、港股、美股/外围、商品/美元。
-
-| 资产 | 关键信号 |
-|------|----------|
+3-5条，每条：发生了什么 + 为什么重要。
 
 ## 市场含义
-3-4条，解释这些增量信息对风险偏好、增长预期、政策预期或板块风格的影响。
+3-4条，对风险偏好、增长/政策预期、板块风格的影响。
 
 ## 风险提示
-2-4条，写当前最值得防范的风险。
+2-4条，当前最值得防范的风险。
 
 ## 今日观察清单
-3-5条，写接下来最值得继续跟踪的变量。
+3-5条，接下来最值得跟踪的变量。
 
 ## 参考来源
-列出实际使用过的来源链接，使用 Markdown 列表。"""
+实际使用的来源链接，Markdown 列表。"""
 
 
-AI_SYSTEM = """你是一位经验丰富的科技与产业分析师，负责根据已提供的新闻素材和社区讨论素材生成正式、克制、面向决策的AI行业日报。
-要求：
-1. 只能基于用户给出的素材写作，不能杜撰事实。
-2. 输出像产业研究简报，突出今日主线、增量动态、行业影响、观察清单。
-3. 社区焦点只能基于已提供的公开讨论素材。"""
+AI_SYSTEM = """科技与产业分析师。根据提供的新闻和社区讨论素材生成AI行业日报。
+规则：只用素材中的事实；禁止编造数字；社区焦点只能来自社区素材；素材不足就减少条数；语言简洁克制，不用情绪化词汇。"""
 
 
-def ai_user_prompt(date_str: str, news_context: str, social_context: str) -> str:
-    return f"""以下是程序已收集到的过去24小时 AI 新闻素材和公开社区讨论素材，请仅基于这些素材生成 {date_str} 的正式AI行业日报。
+def ai_news_prompt(date_str: str, news_context: str) -> str:
+    return f"""过去24小时AI新闻素材如下，仅基于此生成 {date_str} AI行业日报新闻部分。
 
 {news_context}
 
-{social_context}
-
-必须严格使用以下结构输出（Markdown格式）：
+输出结构（Markdown）：
 
 # AI行业日报 | {date_str}
 
 ## 今日主线
-1-2句话概括今天AI行业最重要的变化。
+1-2句，AI行业最重要的变化。
 
 ## 增量动态（24h）
-4-6条，每条格式：
+4-6条，每条：
 - **标题：**
 - **来源：**
 - **核心内容：**
 - **行业意义：**
 
+## 行业影响
+3-4条，对模型竞争、产品商业化、算力供给、监管或资本市场的影响。
+
+## 参考来源
+实际使用的来源链接，Markdown 列表。"""
+
+
+def ai_social_prompt(date_str: str, social_context: str) -> str:
+    return f"""过去24小时AI社区讨论素材如下，仅基于此生成社区焦点和观察清单。
+
+{social_context}
+
+输出结构（Markdown）：
+
 ## 社区焦点
-2-4条，每条格式：
+2-4条，每条：
 - **平台：**
 - **话题：**
 - **讨论要点：**
 - **值得关注的原因：**
 
-## 行业影响
-3-4条，说明这些信息对模型竞争、产品商业化、算力供给、监管或资本市场意味着什么。
-
 ## 今日观察清单
-3-5条，写接下来最值得继续跟踪的变量。
-
-## 参考来源
-列出实际使用过的来源链接，使用 Markdown 列表。"""
+3-5条，综合新闻与社区动态，接下来最值得跟踪的变量。"""
 
 
 def md_inline_to_html(text: str) -> str:
@@ -228,8 +221,13 @@ def main():
 
     print("采集 AI 新闻与社区讨论素材...")
     ai_news_context, ai_social_context = base.collect_ai_context()
-    print("生成 AI 行业日报...")
-    ai_md = base.call_api(AI_SYSTEM, ai_user_prompt(date_str, ai_news_context, ai_social_context))
+    print("生成 AI 行业日报（新闻部分）...")
+    ai_news_md = base.call_api(AI_SYSTEM, ai_news_prompt(date_str, ai_news_context))
+    print("等待 15s 避免限速...")
+    base.time.sleep(15)
+    print("生成 AI 行业日报（社区部分）...")
+    ai_social_md = base.call_api(AI_SYSTEM, ai_social_prompt(date_str, ai_social_context))
+    ai_md = ai_news_md + "\n\n" + ai_social_md
     ai_html = md_to_html(ai_md, f"AI行业日报 | {date_str}", "AI行业日报")
     base.send_email(f"📗 AI行业日报 | {date_str}", ai_html)
     print("AI行业日报已发送")
