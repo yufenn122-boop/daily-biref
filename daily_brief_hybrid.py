@@ -37,7 +37,7 @@ def get_env_or_default(name: str, default: str) -> str:
 
 
 API_KEY = get_required_env("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
-OPENAI_BASE_URL = get_env_or_default("OPENAI_BASE_URL", "https://code.ppchat.vip/v1").rstrip("/")
+OPENAI_BASE_URL = get_env_or_default("OPENAI_BASE_URL", "https://new.aicode.us.com").rstrip("/")
 OPENAI_MODEL = get_env_or_default("OPENAI_MODEL", "gpt-5.4")
 API_ENDPOINT = f"{OPENAI_BASE_URL}/chat/completions"
 COLLECT_TIMEOUT_SECONDS = int(get_env_or_default("COLLECT_TIMEOUT_SECONDS", "30"))
@@ -70,13 +70,15 @@ def call_api(system_prompt: str, user_prompt: str) -> str:
     wait = 20
     for attempt in range(5):
         resp = requests.post(API_ENDPOINT, headers=headers, json=payload, timeout=(30, 180))
-        if resp.status_code == 429:
-            print(f"  [限速] 等待 {wait}s 后重试（第{attempt + 1}次）...")
+        if resp.status_code in (429, 502, 503, 504):
+            print(f"  [重试] HTTP {resp.status_code}，等待 {wait}s 后重试（第{attempt + 1}次）...")
             time.sleep(wait)
             wait = min(wait * 2, 120)
             continue
         if not resp.ok:
-            raise RuntimeError(f"API 调用失败: HTTP {resp.status_code} - {resp.text}")
+            raise RuntimeError(f"API 调用失败: HTTP {resp.status_code} - {resp.text[:500]}")
+        if not resp.text.strip():
+            raise RuntimeError(f"API 返回空响应 (HTTP {resp.status_code})，请检查 API Key 是否与接口匹配")
         return resp.json()["choices"][0]["message"]["content"].strip()
 
     raise RuntimeError("API 多次限速，放弃重试")
@@ -282,7 +284,7 @@ def collect_ai_context() -> tuple[str, str]:
     news_items = []
     seen = set()
     for query in ai_queries:
-        for item in fetch_google_news(query, limit=8):
+        for item in fetch_google_news(query, limit=6):
             key = (item["title"], item["source"])
             if key in seen:
                 continue
@@ -290,9 +292,9 @@ def collect_ai_context() -> tuple[str, str]:
             news_items.append(item)
     news_items.sort(key=lambda x: x["published_at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
 
-    discussions = fetch_hn_discussions(limit=8)
-    news_context = build_news_context("过去24小时AI新闻素材：", news_items[:12])
-    social_context = build_news_context("过去24小时公开社区讨论素材：", discussions[:8], include_metrics=True)
+    discussions = fetch_hn_discussions(limit=5)
+    news_context = build_news_context("过去24小时AI新闻素材：", news_items[:8])
+    social_context = build_news_context("过去24小时公开社区讨论素材：", discussions[:5], include_metrics=True)
     return news_context, social_context
 
 
